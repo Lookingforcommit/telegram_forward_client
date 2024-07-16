@@ -1,16 +1,11 @@
-# (c) @AbirHasan2005 | Thomas Shelby
-# This is Telegram Messages Forwarder UserBot!
-# Use this at your own risk. I will not be responsible for any kind of issue while using this!
+# (c) @AbirHasan2005
+# (c) @Lookingforcommit
 
-import os
-import sys
-import time
 import asyncio
 from pyrogram import Client, filters, enums
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 from configs import Config
-from helpers.kanger import Kanger
 from helpers.forwarder import ForwardMessage
 
 RUN = {"isRunning": True}
@@ -23,7 +18,7 @@ User = Client(
 )
 
 
-@User.on_message((filters.text | filters.media))
+@User.on_message(filters.all)
 async def main(client: Client, message: Message):
     if (-100 in Config.FORWARD_TO_CHAT_ID) or (-100 in Config.FORWARD_FROM_CHAT_ID):
         try:
@@ -91,35 +86,6 @@ async def main(client: Client, message: Message):
             except ValueError:
                 pass
         return await message.edit("Removed Successfully!")
-    elif (message.text in ["!restart"]) and message.from_user.is_self:
-        if Config.HEROKU_APP is None:
-            await message.edit(
-                text="Restarting Userbot ...",
-                disable_web_page_preview=True
-            )
-            # https://stackoverflow.com/a/57032597/15215201
-            os.execl(sys.executable, sys.executable, *sys.argv)
-        else:
-            await message.edit(
-                text="Restarting Heroku Dyno ..."
-            )
-            Config.HEROKU_APP.restart()
-            time.sleep(30)
-    elif (message.text == "!kang") and message.from_user.is_self and RUN["isRunning"]:
-        if len(Config.FORWARD_FROM_CHAT_ID) > 1:
-            await message.edit(
-                text="Sorry Sir,\n"
-                     "We can Kang only one Chat! But you put multiple Chat IDs in `FORWARD_FROM_CHAT_ID` Config!",
-                disable_web_page_preview=True
-            )
-            return
-        await message.edit(
-            text=f"Trying to Get All Messages from `{str(Config.FORWARD_FROM_CHAT_ID[0])}` and Forwarding to {' '.join(str(Config.FORWARD_TO_CHAT_ID))} ...",
-            disable_web_page_preview=True)
-        await asyncio.sleep(5)
-        try_kang = await Kanger(c=User, m=message)
-        if try_kang == 400:
-            return
     elif message.chat.id in Config.FORWARD_FROM_CHAT_ID and RUN["isRunning"]:
         try_forward = await ForwardMessage(client, message)
         if try_forward == 400:
