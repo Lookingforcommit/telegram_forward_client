@@ -1,42 +1,35 @@
 # (c) @AbirHasan2005
+# (c) @Lookingforcommit
 
 import asyncio
-from configs import Config
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
+from typing import List
+
 from helpers.filters import FilterMessage
-from helpers.file_size_checker import CheckFileSize
-from helpers.block_exts_handler import CheckBlockedExt
 
 
-async def ForwardMessage(client: Client, msg: Message):
+async def ForwardMessage(client: Client, msg: Message, forward_as_copy: bool, forward_to_chat_ids: List[int],
+                         forward_filters: List[str]):
     try:
         ## --- Check 1 --- ##
-        can_forward = await FilterMessage(message=msg)
+        can_forward = await FilterMessage(msg, forward_filters)
         if can_forward == 400:
             return 400
         ## --- Check 2 --- ##
-        has_blocked_ext = await CheckBlockedExt(event=msg)
-        if has_blocked_ext is True:
-            return 400
-        ## --- Check 3 --- ##
-        file_size_passed = await CheckFileSize(msg=msg)
-        if file_size_passed is False:
-            return 400
-        ## --- Check 4 --- ##
-        for i in range(len(Config.FORWARD_TO_CHAT_ID)):
+        for i in range(len(forward_to_chat_ids)):
             try:
-                if Config.FORWARD_AS_COPY is True:
-                    await msg.copy(Config.FORWARD_TO_CHAT_ID[i])
+                if forward_as_copy is True:
+                    await msg.copy(forward_to_chat_ids[i])
                 else:
-                    await msg.forward(Config.FORWARD_TO_CHAT_ID[i])
+                    await msg.forward(forward_to_chat_ids[i])
             except FloodWait as e:
-                await asyncio.sleep(e.value)
                 await client.send_message(chat_id="me", text=f"#FloodWait: Stopped Forwarder for `{e.value}s`!")
-                await asyncio.sleep(Config.SLEEP_TIME)
-                await ForwardMessage(client, msg)
+                await asyncio.sleep(e.value)
+                await ForwardMessage(client, msg, forward_as_copy, forward_to_chat_ids, forward_filters)
             except Exception as err:
-                await client.send_message(chat_id="me", text=f"#ERROR: `{err}`\n\nUnable to Forward Message to `{str(Config.FORWARD_TO_CHAT_ID[i])}`")
+                await client.send_message(chat_id="me", text=f"#ERROR: `{err}`\n\nUnable to Forward Message to "
+                                                             f"`{str(forward_to_chat_ids[i])}`")
     except Exception as err:
         await client.send_message(chat_id="me", text=f"#ERROR: `{err}`")

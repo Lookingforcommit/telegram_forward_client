@@ -1,0 +1,9 @@
+{
+  "API_ID": 0,
+  "API_HASH": "",
+  "FORWARD_FROM_CHAT_IDS": [0],
+  "FORWARD_TO_CHAT_IDS": [0],
+  "SESSION_STRING": "",
+  "FORWARD_FILTERS": [],
+  "FORWARD_AS_COPY": true
+}
