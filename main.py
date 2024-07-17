@@ -39,7 +39,7 @@ user = Client(
 async def get_session_string(client: Client, message: Message, users, chats):
     if CONFIGS.session_string == "":
         CONFIGS.session_string = await client.export_session_string()
-        configs_json = json.dumps(vars(CONFIGS))
+        configs_json = json.dumps(vars(CONFIGS), indent=2)
         with open("configs.json", "w") as f:
             f.write(configs_json)
 
