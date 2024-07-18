@@ -1,11 +1,9 @@
 # (c) @AbirHasan2005
 # (c) @Lookingforcommit
 
-import asyncio
-import json
-from pyrogram import Client, filters, enums
-from pyrogram.types import Message
-from pyrogram.errors import FloodWait
+from pyrogram import Client, filters
+from pyrogram.types import Message, ChatPreview
+from pyrogram.enums.chat_type import ChatType
 import pyrogram.utils as utils
 
 from configs import Config
@@ -24,7 +22,7 @@ def get_peer_type(peer_id: int) -> str:
 
 
 utils.get_peer_type = get_peer_type
-RUN = {"isRunning": True}
+RUN = {"is_running": True}
 CONFIGS = Config()
 user = Client(
     name='pyrogram',
@@ -35,85 +33,140 @@ user = Client(
 )
 
 
+async def on_start_command(client: Client, message: Message):
+    if not RUN["is_running"]:
+        RUN["is_running"] = True
+    await message.edit(
+        text=f"Hi, **{(await client.get_me()).first_name}**!\nThis is a forwarder userbot by @Lookingforcommit",
+        disable_web_page_preview=True)
+
+
+async def on_stop_command(message: Message):
+    if RUN["is_running"]:
+        RUN["is_running"] = False
+    return await message.edit("Userbot stopped!\n\nSend `!start` to start userbot again.")
+
+
+async def on_help_command(message: Message):
+    await message.edit(
+        text=CONFIGS.HELP_TEXT,
+        disable_web_page_preview=True)
+
+
+async def check_chat(client: Client, chat_id: int) -> bool:
+    try:
+        chat = await client.get_chat(chat_id)
+        if type(chat) is ChatPreview:
+            return False
+        return True
+    except ValueError:
+        return False
+
+
+async def on_add_forward_command(client: Client, message: Message):
+    if len(message.text.split(" ", 1)) < 2:
+        return await client.send_message(
+            chat_id="me",
+            text="No chat_id specified"
+        )
+    chat_ids = set(message.text.split(" ")[1:])
+    invalid_chat_ids = []
+    for chat_id in chat_ids:
+        valid = await check_chat(client, int(chat_id))
+        if not valid:
+            invalid_chat_ids.append(int(chat_id))
+    if len(invalid_chat_ids) > 0:
+        return await client.send_message(
+            chat_id="me",
+            text=f"Invalid chat_ids or you are not a member of the chats: {invalid_chat_ids}"
+        )
+    for chat_id in chat_ids:
+        chat_id = int(chat_id)
+        if message.text.startswith("!add_forward_to_chat") and chat_id not in CONFIGS.forward_to_chat_ids:
+            CONFIGS.forward_to_chat_ids.add(chat_id)
+        elif message.text.startswith("!add_forward_from_chat") and chat_id not in CONFIGS.forward_to_chat_ids:
+            CONFIGS.forward_from_chat_ids.add(chat_id)
+        CONFIGS.dump()
+    return await client.send_message(
+        chat_id="me",
+        text="Added successfully!"
+    )
+
+
+async def on_remove_forward_command(client: Client, message: Message):
+    if len(message.text.split(" ", 1)) < 2:
+        return await client.send_message(
+            chat_id="me",
+            text="No chat_id specified"
+        )
+    chat_ids = set(message.text.split(" ")[1:])
+    invalid_chat_ids = []
+    for chat_id in chat_ids:
+        try:
+            chat_id = int(chat_id)
+        except ValueError:
+            invalid_chat_ids.append(int(chat_id))
+    if len(invalid_chat_ids) > 0:
+        return await client.send_message(
+            chat_id="me",
+            text=f"Invalid chat_ids: {invalid_chat_ids}"
+        )
+    for chat_id in chat_ids:
+        chat_id = int(chat_id)
+        if message.text.startswith("!remove_forward_to_chat") and chat_id in CONFIGS.forward_to_chat_ids:
+            CONFIGS.forward_to_chat_ids.remove(chat_id)
+        elif message.text.startswith("!remove_forward_from_chat") and chat_id in CONFIGS.forward_from_chat_ids:
+            CONFIGS.forward_from_chat_ids.remove(chat_id)
+    return await client.send_message(
+        chat_id="me",
+        text="Removed successfully"
+    )
+
+
+async def on_list_forward_command(client: Client, message: Message):
+    if message.text.startswith("!list_forward_to_chat"):
+        return await client.send_message(
+            chat_id="me",
+            text=f"List of chats you are forwarding to: {CONFIGS.forward_to_chat_ids}"
+        )
+    elif message.text.startswith("!list_forward_from_chat"):
+        return await client.send_message(
+            chat_id="me",
+            text=f"List of chats you are forwarding from: {CONFIGS.forward_from_chat_ids}"
+        )
+
+
 @user.on_raw_update(group=1)
 async def get_session_string(client: Client, message: Message, users, chats):
     if CONFIGS.session_string == "":
         CONFIGS.session_string = await client.export_session_string()
-        configs_json = json.dumps(vars(CONFIGS), indent=2)
-        with open("configs.json", "w") as f:
-            f.write(configs_json)
+        CONFIGS.dump()
 
 
 @user.on_message(filters.all, group=0)
 async def main(client: Client, message: Message):
-    if CONFIGS.forward_to_chat_ids is None or CONFIGS.forward_from_chat_ids is None:
-        try:
-            await client.send_message(
-                chat_id="me",
-                text=f"#VARS_MISSING: Please Set `FORWARD_FROM_CHAT_ID` or `FORWARD_TO_CHAT_ID` CONFIGS!"
-            )
-        except FloodWait as e:
-            await asyncio.sleep(e.value)
-        return
-    if (message.text == "!start") and message.from_user.is_self:
-        if not RUN["isRunning"]:
-            RUN["isRunning"] = True
-        await message.edit(
-            text=f"Hi, **{(await client.get_me()).first_name}**!\nThis is a Forwarder Userbot by @AbirHasan2005",
-            disable_web_page_preview=True)
-    elif (message.text == "!stop") and message.from_user.is_self:
-        RUN["isRunning"] = False
-        return await message.edit("Userbot Stopped!\n\nSend `!start` to start userbot again.")
-    elif (message.text == "!help") and message.from_user.is_self and RUN["isRunning"]:
-        await message.edit(
-            text=CONFIGS.HELP_TEXT,
-            disable_web_page_preview=True)
-    elif message.text and (message.text.startswith("!add_forward_")) and message.from_user.is_self and RUN["isRunning"]:
-        if len(message.text.split(" ", 1)) < 2:
-            return await message.edit(f"{message.text} chat_id")
-        for x in message.text.split(" ", 1)[-1].split(" "):
-            if x.isdigit() and message.text.startswith("!add_forward_to_chat"):
-                CONFIGS.forward_to_chat_ids.append(int(x))
-            elif x.isdigit() and message.text.startswith("!add_forward_from_chat"):
-                CONFIGS.forward_from_chat_ids.append(int(x))
-            elif x.lower().startswith("all_joined_"):
-                chat_ids = []
-                if x.lower() == "all_joined_groups":
-                    await message.edit("Listing all joined groups ...")
-                    async for dialog in client.get_dialogs():
-                        chat = dialog.chat
-                        if chat and (chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]):
-                            chat_ids.append(chat.id)
-                if x.lower() == "all_joined_channels":
-                    await message.edit("Listing all joined channels ...")
-                    async for dialog in client.get_dialogs():
-                        chat = dialog.chat
-                        if chat and (chat.type == enums.ChatType.CHANNEL):
-                            chat_ids.append(chat.id)
-                if not chat_ids:
-                    return await message.edit("No Chats Found !!")
-                for chat_id in chat_ids:
-                    if chat_id not in CONFIGS.forward_to_chat_ids:
-                        CONFIGS.forward_to_chat_ids.append(chat_id)
-            else:
-                pass
-        return await message.edit("Added Successfully!")
-    elif message.text and (message.text.startswith("!remove_forward_")) and message.from_user.is_self and RUN[
-        "isRunning"]:
-        if len(message.text.split(" ", 1)) < 2:
-            return await message.edit(f"{message.text} chat_id")
-        for x in message.text.split(" ", 1)[-1].split(" "):
-            try:
-                if x.isdigit() and message.text.startswith("!remove_forward_to_chat"):
-                    CONFIGS.forward_to_chat_ids.remove(int(x))
-                elif x.isdigit() and message.text.startswith("!remove_forward_from_chat"):
-                    CONFIGS.forward_from_chat_ids.remove(int(x))
-                else:
-                    pass
-            except ValueError:
-                pass
-        return await message.edit("Removed Successfully!")
-    elif message.chat.id in CONFIGS.forward_from_chat_ids and RUN["isRunning"]:
+    bot_command = (message.chat is not None and message.chat.type == ChatType.PRIVATE and message.from_user.is_self
+                   and message.text is not None)
+    if bot_command:
+        add_forward_command = (message.text.startswith("!add_forward_to_chat") or
+                               message.text.startswith("!add_forward_from_chat"))
+        remove_forward_command = (message.text.startswith("!remove_forward_to_chat") or
+                                  message.text.startswith("!remove_forward_from_chat"))
+        list_forward_command = (message.text.startswith("!list_forward_to_chat") or
+                                message.text.startswith("!list_forward_from_chat"))
+        if message.text == "!start":
+            await on_start_command(client, message)
+        elif message.text == "!stop":
+            await on_stop_command(message)
+        elif message.text == "!help":
+            await on_help_command(message)
+        elif add_forward_command:
+            await on_add_forward_command(client, message)
+        elif remove_forward_command:
+            await on_remove_forward_command(client, message)
+        elif list_forward_command:
+            await on_list_forward_command(client, message)
+    elif message.chat is not None and message.chat.id in CONFIGS.forward_from_chat_ids and RUN["is_running"]:
         try_forward = await ForwardMessage(client, message, CONFIGS.forward_as_copy, CONFIGS.forward_to_chat_ids,
                                            CONFIGS.forward_filters)
         if try_forward == 400:

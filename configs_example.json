@@ -2,12 +2,8 @@
   "api_id": 0,
   "api_hash": "",
   "session_string": "",
-  "forward_from_chat_ids": [
-    0
-  ],
-  "forward_to_chat_ids": [
-    0
-  ],
+  "forward_from_chat_ids": [],
+  "forward_to_chat_ids": [],
   "forward_filters": [],
   "forward_as_copy": true
 }
