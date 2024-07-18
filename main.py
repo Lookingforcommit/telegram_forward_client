@@ -1,13 +1,15 @@
 # (c) @AbirHasan2005
 # (c) @Lookingforcommit
 
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, ChatPreview
 from pyrogram.enums.chat_type import ChatType
+from pyrogram.errors import FloodWait
 import pyrogram.utils as utils
 
 from configs import Config
-from helpers.forwarder import ForwardMessage
+from helpers.forwarder import forward_message
 
 
 #  Pyrogram invalid peer id bugfix
@@ -167,10 +169,12 @@ async def main(client: Client, message: Message):
         elif list_forward_command:
             await on_list_forward_command(client, message)
     elif message.chat is not None and message.chat.id in CONFIGS.forward_from_chat_ids and RUN["is_running"]:
-        try_forward = await ForwardMessage(client, message, CONFIGS.forward_as_copy, CONFIGS.forward_to_chat_ids,
-                                           CONFIGS.forward_filters)
-        if try_forward == 400:
-            return
+        while True:
+            try:
+                await forward_message(client, message, CONFIGS.forward_as_copy, CONFIGS.forward_to_chat_ids)
+                break
+            except FloodWait as e:
+                await asyncio.sleep(e.value)
 
 
 if __name__ == "__main__":

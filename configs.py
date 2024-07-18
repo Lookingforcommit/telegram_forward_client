@@ -2,7 +2,7 @@
 # (c) @Lookingforcommit
 
 import json
-from typing import Optional, List, Set
+from typing import Optional, Set
 from copy import copy
 
 
@@ -30,7 +30,6 @@ class Config:
         self.session_string: Optional[str] = _data["session_string"]
         self.forward_from_chat_ids: Set[int] = set(_data["forward_from_chat_ids"])
         self.forward_to_chat_ids: Set[int] = set(_data["forward_to_chat_ids"])
-        self.forward_filters: List[str] = list(set(_data["forward_filters"]))
         self.forward_as_copy: bool = _data["forward_as_copy"]
 
     def dump(self) -> None:
