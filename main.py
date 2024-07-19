@@ -1,3 +1,6 @@
+@AbirHasan2005
+@Lookingforcommit
+@synthimental
 import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, ChatPreview
@@ -231,6 +234,13 @@ async def on_list_connections(client: Client, message: Message):
         text=f"List of connections:\n{connections_text}",
         disable_web_page_preview=True
     )
+
+
+@user.on_raw_update(group=1)
+async def get_session_string(client: Client, message: Message, users, chats):
+    if CONFIGS.session_string == "":
+        CONFIGS.session_string = await client.export_session_string()
+        CONFIGS.dump()
 
 
 @user.on_message(filters.command("start", prefixes="!"), group=0)
