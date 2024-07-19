@@ -1,11 +1,9 @@
-@AbirHasan2005
-@Lookingforcommit
-@synthimental
-import asyncio
+# (c) @AbirHasan2005
+# (c) @Lookingforcommit
+# (c) @synthimental
+
 from pyrogram import Client, filters
 from pyrogram.types import Message, ChatPreview
-from pyrogram.enums.chat_type import ChatType
-from pyrogram.errors import FloodWait
 import pyrogram.utils as utils
 
 from configs import Config
@@ -305,7 +303,7 @@ async def forward_from_chat(client: Client, message: Message):
         return
 
     # Get the message details and forward to the target chats
-    await forward_message(client, message)
+    await forward_message(client, message, CONFIGS.forward_as_copy, CONFIGS.channel_links[message.chat.id])
 
 
 if __name__ == "__main__":

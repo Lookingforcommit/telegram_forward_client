@@ -1,6 +1,7 @@
-@AbirHasan2005
-@Lookingforcommit
-@synthimental
+# (c) @AbirHasan2005
+# (c) @Lookingforcommit
+# (c) @synthimental
+
 import json
 from typing import Optional, Set, Dict
 from copy import copy
