@@ -4,6 +4,6 @@
   "session_string": "",
   "forward_from_chat_ids": [],
   "forward_to_chat_ids": [],
-  "forward_filters": [],
-  "forward_as_copy": true
+  "forward_as_copy": true,
+  "links": {}
 }
