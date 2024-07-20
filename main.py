@@ -2,15 +2,17 @@
 # (c) @Lookingforcommit
 # (c) @synthimental
 
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, ChatPreview
+from pyrogram.enums.chat_type import ChatType
+from pyrogram.errors import FloodWait
 import pyrogram.utils as utils
 
 from configs import Config
 from helpers.forwarder import forward_message
 
 
-#  Pyrogram invalid peer id bugfix
 def get_peer_type(peer_id: int) -> str:
     peer_id_str = str(peer_id)
     if not peer_id_str.startswith("-"):
@@ -37,273 +39,251 @@ async def on_start_command(client: Client, message: Message):
     if not RUN["is_running"]:
         RUN["is_running"] = True
     await message.edit(
-        text=f"Hi, **{(await client.get_me()).first_name}**!\nThis is a forwarder userbot by @Lookingforcommit",
+        text=f"🤖 Hi, **{(await client.get_me()).first_name}**!\nThis is a forwarder userbot by @Lookingforcommit",
         disable_web_page_preview=True)
 
 
 async def on_stop_command(message: Message):
     if RUN["is_running"]:
         RUN["is_running"] = False
-    return await message.edit("Userbot stopped!\n\nSend `!start` to start userbot again.")
+    return await message.edit("🤖 Userbot stopped!\n\nSend `!start` to start userbot again.")
 
 
 async def on_help_command(message: Message):
-    await message.edit(
-        text=CONFIGS.HELP_TEXT,
-        disable_web_page_preview=True)
+    help_text = """
+    🤖 This UserBot can forward messages from specific chats to linked chats.
+    👨🏻‍💻 **Commands:**
+    • `!start` - Check if the userbot is alive.
+    • `!help` - Get this help message.
+    • `!stop` - Stop the userbot.
+    • `!add_source` - Add chat IDs to forward messages from.
+    • `!add_target` - Add chat IDs to forward messages to.
+    • `!remove_source` - Remove chat IDs from the list of sources.
+    • `!remove_target` - Remove chat IDs from the list of targets.
+    • `!list` - List chat IDs of sources and targets.
+    • `!link` - Connect a source channel to a destination channel.
+    • `!unlink` - Disconnect a source channel from a destination channel.
+    • `!list_links` - List all source to destination channel connections.
+    """
+    await message.edit(text=help_text, disable_web_page_preview=True)
 
 
-async def check_chat(client: Client, chat_id: int) -> bool:
+async def get_chat_name(client: Client, chat_id: int) -> str:
     try:
         chat = await client.get_chat(chat_id)
-        if type(chat) is ChatPreview:
-            return False
-        return True
+        return chat.title or chat.first_name or str(chat_id)
+    except Exception:
+        return str(chat_id)
+
+
+async def on_add_command(client: Client, message: Message, is_source: bool):
+    if len(message.text.split(" ", 1)) < 2:
+        return await message.reply_text("🤖 No chat_id specified")
+
+    chat_ids = message.text.split(" ")[1:]
+    added_chats = []
+
+    for chat_id in chat_ids:
+        try:
+            chat_id = int(chat_id)
+            chat_name = await get_chat_name(client, chat_id)
+            if is_source:
+                if chat_id not in CONFIGS.forward_from_chat_ids:
+                    CONFIGS.forward_from_chat_ids.add(chat_id)
+                    added_chats.append(f"{chat_name}")
+            else:
+                if chat_id not in CONFIGS.forward_to_chat_ids:
+                    CONFIGS.forward_to_chat_ids.add(chat_id)
+                    added_chats.append(f"{chat_name}")
+        except ValueError:
+            await message.reply_text(f"🤖 Invalid chat_id: {chat_id}")
+
+    if added_chats:
+        CONFIGS.dump()
+        response = "🤖 Added successfully:\n" + "\n".join([f"{name} added successfully!" for name in added_chats])
+        await message.reply_text(response)
+    else:
+        await message.reply_text("🤖 No new chats were added.")
+
+
+async def on_remove_command(client: Client, message: Message, is_source: bool):
+    if len(message.text.split(" ", 1)) < 2:
+        return await message.reply_text("🤖 No chat_id specified")
+
+    chat_ids = message.text.split(" ")[1:]
+    removed_chats = []
+
+    for chat_id in chat_ids:
+        try:
+            chat_id = int(chat_id)
+            chat_name = await get_chat_name(client, chat_id)
+            if is_source:
+                if chat_id in CONFIGS.forward_from_chat_ids:
+                    CONFIGS.forward_from_chat_ids.remove(chat_id)
+                    removed_chats.append(f"{chat_name}")
+            else:
+                if chat_id in CONFIGS.forward_to_chat_ids:
+                    CONFIGS.forward_to_chat_ids.remove(chat_id)
+                    removed_chats.append(f"{chat_name}")
+        except ValueError:
+            await message.reply_text(f"🤖 Invalid chat_id: {chat_id}")
+
+    if removed_chats:
+        CONFIGS.dump()
+        response = "🤖 Removed successfully:\n" + "\n".join([f"{name} removed successfully!" for name in removed_chats])
+        await message.reply_text(response)
+    else:
+        await message.reply_text("🤖 No chats were removed.")
+
+
+async def on_list_command(client: Client, message: Message):
+    if not CONFIGS.forward_from_chat_ids and not CONFIGS.forward_to_chat_ids:
+        return await message.reply_text("🤖 No chats have been added yet.")
+
+    response = []
+    if CONFIGS.forward_from_chat_ids:
+        source_list = ["🤖 Source:"]
+        for chat_id in CONFIGS.forward_from_chat_ids:
+            chat_name = await get_chat_name(client, chat_id)
+            source_list.append(f"{chat_name}(`{chat_id}`)")
+        response.extend(source_list)
+
+    if CONFIGS.forward_to_chat_ids:
+        if response:
+            response.append("")
+        target_list = ["🤖 Target:"]
+        for chat_id in CONFIGS.forward_to_chat_ids:
+            chat_name = await get_chat_name(client, chat_id)
+            target_list.append(f"{chat_name}(`{chat_id}`)")
+        response.extend(target_list)
+
+    await message.reply_text("\n".join(response))
+
+
+
+async def on_link_command(client: Client, message: Message):
+    parts = message.text.split()
+    if len(parts) != 3:
+        return await message.reply_text("🤖 Usage: !link <source_id> <target_id>")
+
+    try:
+        source_id, target_id = map(int, parts[1:3])
     except ValueError:
-        return False
+        return await message.reply_text("🤖 Invalid chat IDs. Please use numeric IDs.")
+
+    if source_id not in CONFIGS.forward_from_chat_ids:
+        return await message.reply_text("🤖 Source ID is not in the list of source chats.")
+    if target_id not in CONFIGS.forward_to_chat_ids:
+        return await message.reply_text("🤖 Target ID is not in the list of target chats.")
 
 
-def get_chat_id_by_name(name: str) -> int:
-    return next((chat_id for chat_id, chat_name in CONFIGS.chat_id_to_name.items() if chat_name == name), None)
+    used_numbers = set()
+    for links in CONFIGS.links.values():
+        used_numbers.update(number for _, number in links)
+    link_number = 1
+    while link_number in used_numbers:
+        link_number += 1
 
+    if source_id not in CONFIGS.links:
+        CONFIGS.links[source_id] = []
+    CONFIGS.links[source_id].append((target_id, link_number))
 
-async def on_add_forward_command(client: Client, message: Message):
-    if len(message.text.split(" ", 1)) < 2:
-        return await client.send_message(
-            chat_id="me",
-            text="No chat_id or name specified"
-        )
-    parts = message.text.split(" ")[1:]
-    chat_ids = set()
-    for part in parts:
-        try:
-            chat_id = int(part)
-            chat_ids.add(chat_id)
-            chat = await client.get_chat(chat_id)
-            CONFIGS.chat_id_to_name[chat_id] = chat.title
-        except ValueError:
-            chat_id = get_chat_id_by_name(part)
-            if chat_id:
-                chat_ids.add(chat_id)
-            else:
-                await client.send_message(
-                    chat_id="me",
-                    text=f"Chat name `{part}` not found"
-                )
-    if len(chat_ids) == 0:
-        return await client.send_message(
-            chat_id="me",
-            text="No valid chat IDs or names found"
-        )
-    for chat_id in chat_ids:
-        if message.text.startswith("!add_target") and chat_id not in CONFIGS.forward_to_chat_ids:
-            CONFIGS.forward_to_chat_ids.add(chat_id)
-        elif message.text.startswith("!add_source") and chat_id not in CONFIGS.forward_from_chat_ids:
-            CONFIGS.forward_from_chat_ids.add(chat_id)
-        CONFIGS.dump()
-    return await client.send_message(
-        chat_id="me",
-        text="Added successfully!"
-    )
+    CONFIGS.link_counter = max(CONFIGS.link_counter, link_number)
 
-
-async def on_remove_forward_command(client: Client, message: Message):
-    if len(message.text.split(" ", 1)) < 2:
-        return await client.send_message(
-            chat_id="me",
-            text="No chat_id or name specified"
-        )
-    parts = message.text.split(" ")[1:]
-    chat_ids = set()
-    for part in parts:
-        try:
-            chat_id = int(part)
-            chat_ids.add(chat_id)
-        except ValueError:
-            chat_id = get_chat_id_by_name(part)
-            if chat_id:
-                chat_ids.add(chat_id)
-            else:
-                await client.send_message(
-                    chat_id="me",
-                    text=f"Chat name `{part}` not found"
-                )
-    if len(chat_ids) == 0:
-        return await client.send_message(
-            chat_id="me",
-            text="No valid chat IDs or names found"
-        )
-    for chat_id in chat_ids:
-        if message.text.startswith("!remove_target") and chat_id in CONFIGS.forward_to_chat_ids:
-            CONFIGS.forward_to_chat_ids.remove(chat_id)
-        elif message.text.startswith("!remove_source") and chat_id in CONFIGS.forward_from_chat_ids:
-            CONFIGS.forward_from_chat_ids.remove(chat_id)
     CONFIGS.dump()
-    return await client.send_message(
-        chat_id="me",
-        text="Removed successfully"
-    )
+
+    source_name = await get_chat_name(client, source_id)
+    target_name = await get_chat_name(client, target_id)
+    await message.reply_text(
+        f"🤖 Linked: {source_name}(`{source_id}`) -> {target_name}(`{target_id}`) - Link #{link_number}")
 
 
-async def on_list_forward_command(client: Client, message: Message):
-    def get_name_from_id(chat_id):
-        return CONFIGS.chat_id_to_name.get(chat_id, str(chat_id))
+async def on_unlink_command(client: Client, message: Message):
+    parts = message.text.split()
+    if len(parts) != 2:
+        return await message.reply_text("🤖 Usage: !unlink <link_number>")
 
-    if message.text.startswith("!list"):
-        sources = ", ".join(f"`{get_name_from_id(chat_id)}`(`{chat_id}`)" for chat_id in CONFIGS.forward_from_chat_ids)
-        targets = ", ".join(f"`{get_name_from_id(chat_id)}`(`{chat_id}`)" for chat_id in CONFIGS.forward_to_chat_ids)
-        response = f"**Source:**\n{sources}\n\n**Target:**\n{targets}"
-        return await client.send_message(
-            chat_id="me",
-            text=response,
-            disable_web_page_preview=True
-        )
+    try:
+        link_number = int(parts[1])
+    except ValueError:
+        return await message.reply_text("🤖 Invalid link number. Please use a numeric value.")
 
+    found = False
+    for source_id, links in CONFIGS.links.items():
+        for i, (target_id, number) in enumerate(links):
+            if number == link_number:
+                del CONFIGS.links[source_id][i]
+                if not CONFIGS.links[source_id]:
+                    del CONFIGS.links[source_id]
 
-async def on_connect_from_to(client: Client, message: Message):
-    parts = message.text.split(" ")
-    if len(parts) < 3:
-        return await client.send_message(
-            chat_id="me",
-            text="Usage: !link <source_channel_name> <destination_channel_name>"
-        )
-    source_name, dest_name = parts[1], parts[2]
-    source_id = get_chat_id_by_name(source_name)
-    dest_id = get_chat_id_by_name(dest_name)
-    if source_id is None or dest_id is None:
-        return await client.send_message(
-            chat_id="me",
-            text="Source or destination channel name not found"
-        )
-    if source_id not in CONFIGS.channel_links:
-        CONFIGS.channel_links[source_id] = set()
-    CONFIGS.channel_links[source_id].add(dest_id)
-    CONFIGS.dump()
-    return await client.send_message(
-        chat_id="me",
-        text=f"Connected `{source_name}` to `{dest_name}`"
-    )
+                CONFIGS.link_counter -= 1
+
+                for s_id in CONFIGS.links:
+                    CONFIGS.links[s_id] = [(t_id, n if n < link_number else n - 1) for t_id, n in CONFIGS.links[s_id]]
+
+                CONFIGS.dump()
+                source_name = await get_chat_name(client, source_id)
+                target_name = await get_chat_name(client, target_id)
+                await message.reply_text(
+                    f"🤖 Unlinked: {source_name}(`{source_id}`) -> {target_name}(`{target_id}`) - Link #{link_number}")
+                found = True
+                break
+        if found:
+            break
+    if not found:
+        await message.reply_text("🤖 This link number does not exist.")
 
 
-async def on_disconnect_from_to(client: Client, message: Message):
-    parts = message.text.split(" ")
-    if len(parts) < 3:
-        return await client.send_message(
-            chat_id="me",
-            text="Usage: !unlink <source_channel_name> <destination_channel_name>"
-        )
-    source_name, dest_name = parts[1], parts[2]
-    source_id = get_chat_id_by_name(source_name)
-    dest_id = get_chat_id_by_name(dest_name)
-    if source_id is None or dest_id is None:
-        return await client.send_message(
-            chat_id="me",
-            text="Source or destination channel name not found"
-        )
-    if source_id in CONFIGS.channel_links and dest_id in CONFIGS.channel_links[source_id]:
-        CONFIGS.channel_links[source_id].remove(dest_id)
-        if len(CONFIGS.channel_links[source_id]) == 0:
-            del CONFIGS.channel_links[source_id]
-        CONFIGS.dump()
-        return await client.send_message(
-            chat_id="me",
-            text=f"Disconnected `{source_name}` from `{dest_name}`"
-        )
-    else:
-        return await client.send_message(
-            chat_id="me",
-            text=f"No connection found between `{source_name}` and `{dest_name}`"
-        )
+async def on_list_links_command(client: Client, message: Message):
+    if not CONFIGS.links:
+        return await message.reply_text("🤖 No active links.")
+
+    links_list = ["🤖 List of links:"]
+    for source_id, links in CONFIGS.links.items():
+        source_name = await get_chat_name(client, source_id)
+        for target_id, link_number in links:
+            target_name = await get_chat_name(client, target_id)
+            links_list.append(f"{source_name}(`{source_id}`) -> {target_name}(`{target_id}`) - Link #{link_number}")
+
+    await message.reply_text("\n".join(links_list))
 
 
-async def on_list_connections(client: Client, message: Message):
-    connection_list = []
-    for source_id, dest_ids in CONFIGS.channel_links.items():
-        source_name = CONFIGS.chat_id_to_name.get(source_id, str(source_id))
-        for dest_id in dest_ids:
-            dest_name = CONFIGS.chat_id_to_name.get(dest_id, str(dest_id))
-            connection_list.append(f"`{source_name}` -> `{dest_name}`")
-    if connection_list:
-        connections_text = "\n".join(connection_list)
-    else:
-        connections_text = "No connections found."
-    return await client.send_message(
-        chat_id="me",
-        text=f"List of connections:\n{connections_text}",
-        disable_web_page_preview=True
-    )
-
-
-@user.on_raw_update(group=1)
-async def get_session_string(client: Client, message: Message, users, chats):
-    if CONFIGS.session_string == "":
-        CONFIGS.session_string = await client.export_session_string()
-        CONFIGS.dump()
-
-
-@user.on_message(filters.command("start", prefixes="!"), group=0)
-async def start(client: Client, message: Message):
-    await on_start_command(client, message)
-
-
-@user.on_message(filters.command("stop", prefixes="!"), group=0)
-async def stop(client: Client, message: Message):
-    await on_stop_command(message)
-
-
-@user.on_message(filters.command("help", prefixes="!"), group=0)
-async def help(client: Client, message: Message):
-    await on_help_command(message)
-
-
-@user.on_message(filters.command("add_target", prefixes="!"), group=0)
-async def add_target(client: Client, message: Message):
-    await on_add_forward_command(client, message)
-
-
-@user.on_message(filters.command("add_source", prefixes="!"), group=0)
-async def add_source(client: Client, message: Message):
-    await on_add_forward_command(client, message)
-
-
-@user.on_message(filters.command("remove_target", prefixes="!"), group=0)
-async def remove_target(client: Client, message: Message):
-    await on_remove_forward_command(client, message)
-
-
-@user.on_message(filters.command("remove_source", prefixes="!"), group=0)
-async def remove_source(client: Client, message: Message):
-    await on_remove_forward_command(client, message)
-
-
-@user.on_message(filters.command("list", prefixes="!"), group=0)
-async def list_chats(client: Client, message: Message):
-    await on_list_forward_command(client, message)
-
-
-@user.on_message(filters.command("link", prefixes="!"), group=0)
-async def link(client: Client, message: Message):
-    await on_connect_from_to(client, message)
-
-
-@user.on_message(filters.command("unlink", prefixes="!"), group=0)
-async def unlink(client: Client, message: Message):
-    await on_disconnect_from_to(client, message)
-
-
-@user.on_message(filters.command("list_links", prefixes="!"), group=0)
-async def list_links(client: Client, message: Message):
-    await on_list_connections(client, message)
-
-
-# Handle messages from source chats
-@user.on_message(filters.chat(list(CONFIGS.forward_from_chat_ids)), group=0)
-async def forward_from_chat(client: Client, message: Message):
-    if not RUN["is_running"]:
-        return
-
-    # Get the message details and forward to the target chats
-    await forward_message(client, message, CONFIGS.forward_as_copy, CONFIGS.channel_links[message.chat.id])
+@user.on_message(filters.all, group=0)
+async def main(client: Client, message: Message):
+    bot_command = (message.chat is not None and message.chat.type == ChatType.PRIVATE and message.from_user.is_self
+                   and message.text is not None)
+    if bot_command:
+        if message.text == "!start":
+            await on_start_command(client, message)
+        elif message.text == "!stop":
+            await on_stop_command(message)
+        elif message.text == "!help":
+            await on_help_command(message)
+        elif message.text.startswith("!add_source"):
+            await on_add_command(client, message, is_source=True)
+        elif message.text.startswith("!add_target"):
+            await on_add_command(client, message, is_source=False)
+        elif message.text.startswith("!remove_source"):
+            await on_remove_command(client, message, is_source=True)
+        elif message.text.startswith("!remove_target"):
+            await on_remove_command(client, message, is_source=False)
+        elif message.text == "!list":
+            await on_list_command(client, message)
+        elif message.text.startswith("!link"):
+            await on_link_command(client, message)
+        elif message.text.startswith("!unlink"):
+            await on_unlink_command(client, message)
+        elif message.text == "!list_links":
+            await on_list_links_command(client, message)
+    elif message.chat is not None and message.chat.id in CONFIGS.forward_from_chat_ids and RUN["is_running"]:
+        if message.chat.id in CONFIGS.links:
+            for target_id, _ in CONFIGS.links[message.chat.id]:
+                while True:
+                    try:
+                        await forward_message(client, message, CONFIGS.forward_as_copy, {target_id})
+                        break
+                    except FloodWait as e:
+                        await asyncio.sleep(e.value)
 
 
 if __name__ == "__main__":
