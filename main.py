@@ -1,18 +1,19 @@
 # (c) @AbirHasan2005
 # (c) @Lookingforcommit
+# (c) @synthimental
 
 import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import Message, ChatPreview
+from pyrogram.types import Message
 from pyrogram.enums.chat_type import ChatType
 from pyrogram.errors import FloodWait
 import pyrogram.utils as utils
 
-from configs import Config
+from configs import CONFIGS
 from helpers.forwarder import forward_message
+from helpers.scenarios import execute_scenarios
 
 
-#  Pyrogram invalid peer id bugfix
 def get_peer_type(peer_id: int) -> str:
     peer_id_str = str(peer_id)
     if not peer_id_str.startswith("-"):
@@ -25,7 +26,7 @@ def get_peer_type(peer_id: int) -> str:
 
 utils.get_peer_type = get_peer_type
 RUN = {"is_running": True}
-CONFIGS = Config()
+#CONFIGS = Config()
 user = Client(
     name='pyrogram',
     api_hash=CONFIGS.api_hash,
@@ -39,110 +40,291 @@ async def on_start_command(client: Client, message: Message):
     if not RUN["is_running"]:
         RUN["is_running"] = True
     await message.edit(
-        text=f"Hi, **{(await client.get_me()).first_name}**!\nThis is a forwarder userbot by @Lookingforcommit",
+        text=f"🤖 Hi, **{(await client.get_me()).first_name}**!\nThis is a forwarder userbot by @Lookingforcommit",
         disable_web_page_preview=True)
 
 
 async def on_stop_command(message: Message):
     if RUN["is_running"]:
         RUN["is_running"] = False
-    return await message.edit("Userbot stopped!\n\nSend `!start` to start userbot again.")
+    return await message.edit("🤖 Userbot stopped!\n\nSend `!start` to start userbot again.")
 
 
 async def on_help_command(message: Message):
-    await message.edit(
-        text=CONFIGS.HELP_TEXT,
-        disable_web_page_preview=True)
+    await message.edit(text=CONFIGS.HELP_TEXT, disable_web_page_preview=True)
 
 
-async def check_chat(client: Client, chat_id: int) -> bool:
+async def get_chat_name(client: Client, chat_id: int) -> str:
     try:
         chat = await client.get_chat(chat_id)
-        if type(chat) is ChatPreview:
-            return False
-        return True
-    except ValueError:
-        return False
+        return chat.title or chat.first_name or str(chat_id)
+    except Exception:
+        return str(chat_id)
 
 
-async def on_add_forward_command(client: Client, message: Message):
+async def on_add_command(client: Client, message: Message, is_source: bool):
     if len(message.text.split(" ", 1)) < 2:
-        return await client.send_message(
-            chat_id="me",
-            text="No chat_id specified"
-        )
-    chat_ids = set(message.text.split(" ")[1:])
-    invalid_chat_ids = []
-    for chat_id in chat_ids:
-        valid = await check_chat(client, int(chat_id))
-        if not valid:
-            invalid_chat_ids.append(int(chat_id))
-    if len(invalid_chat_ids) > 0:
-        return await client.send_message(
-            chat_id="me",
-            text=f"Invalid chat_ids or you are not a member of the chats: {invalid_chat_ids}"
-        )
-    for chat_id in chat_ids:
-        chat_id = int(chat_id)
-        if message.text.startswith("!add_forward_to_chat") and chat_id not in CONFIGS.forward_to_chat_ids:
-            CONFIGS.forward_to_chat_ids.add(chat_id)
-        elif message.text.startswith("!add_forward_from_chat") and chat_id not in CONFIGS.forward_to_chat_ids:
-            CONFIGS.forward_from_chat_ids.add(chat_id)
-        CONFIGS.dump()
-    return await client.send_message(
-        chat_id="me",
-        text="Added successfully!"
-    )
+        return await message.reply_text("🤖 No chat_id specified")
 
+    chat_ids = message.text.split(" ")[1:]
+    added_chats = []
 
-async def on_remove_forward_command(client: Client, message: Message):
-    if len(message.text.split(" ", 1)) < 2:
-        return await client.send_message(
-            chat_id="me",
-            text="No chat_id specified"
-        )
-    chat_ids = set(message.text.split(" ")[1:])
-    invalid_chat_ids = []
     for chat_id in chat_ids:
         try:
             chat_id = int(chat_id)
+            chat_name = await get_chat_name(client, chat_id)
+            if is_source:
+                if chat_id not in CONFIGS.forward_from_chat_ids:
+                    CONFIGS.forward_from_chat_ids.add(chat_id)
+                    added_chats.append(f"{chat_name}")
+            else:
+                if chat_id not in CONFIGS.forward_to_chat_ids:
+                    CONFIGS.forward_to_chat_ids.add(chat_id)
+                    added_chats.append(f"{chat_name}")
         except ValueError:
-            invalid_chat_ids.append(int(chat_id))
-    if len(invalid_chat_ids) > 0:
-        return await client.send_message(
-            chat_id="me",
-            text=f"Invalid chat_ids: {invalid_chat_ids}"
-        )
-    for chat_id in chat_ids:
-        chat_id = int(chat_id)
-        if message.text.startswith("!remove_forward_to_chat") and chat_id in CONFIGS.forward_to_chat_ids:
-            CONFIGS.forward_to_chat_ids.remove(chat_id)
-        elif message.text.startswith("!remove_forward_from_chat") and chat_id in CONFIGS.forward_from_chat_ids:
-            CONFIGS.forward_from_chat_ids.remove(chat_id)
-    return await client.send_message(
-        chat_id="me",
-        text="Removed successfully"
-    )
+            await message.reply_text(f"🤖 Invalid chat_id: {chat_id}")
 
-
-async def on_list_forward_command(client: Client, message: Message):
-    if message.text.startswith("!list_forward_to_chat"):
-        return await client.send_message(
-            chat_id="me",
-            text=f"List of chats you are forwarding to: {CONFIGS.forward_to_chat_ids}"
-        )
-    elif message.text.startswith("!list_forward_from_chat"):
-        return await client.send_message(
-            chat_id="me",
-            text=f"List of chats you are forwarding from: {CONFIGS.forward_from_chat_ids}"
-        )
-
-
-@user.on_raw_update(group=1)
-async def get_session_string(client: Client, message: Message, users, chats):
-    if CONFIGS.session_string == "":
-        CONFIGS.session_string = await client.export_session_string()
+    if added_chats:
         CONFIGS.dump()
+        response = "🤖 Added successfully:\n" + "\n".join([f"{name} added successfully!" for name in added_chats])
+        await message.reply_text(response)
+    else:
+        await message.reply_text("🤖 No new chats were added.")
+
+
+async def on_remove_command(client: Client, message: Message, is_source: bool):
+    if len(message.text.split(" ", 1)) < 2:
+        return await message.reply_text("🤖 No chat_id specified")
+
+    chat_ids = message.text.split(" ")[1:]
+    removed_chats = []
+
+    for chat_id in chat_ids:
+        try:
+            chat_id = int(chat_id)
+            chat_name = await get_chat_name(client, chat_id)
+            if is_source:
+                if chat_id in CONFIGS.forward_from_chat_ids:
+                    CONFIGS.forward_from_chat_ids.remove(chat_id)
+                    removed_chats.append(f"{chat_name}")
+            else:
+                if chat_id in CONFIGS.forward_to_chat_ids:
+                    CONFIGS.forward_to_chat_ids.remove(chat_id)
+                    removed_chats.append(f"{chat_name}")
+        except ValueError:
+            await message.reply_text(f"🤖 Invalid chat_id: {chat_id}")
+
+    if removed_chats:
+        CONFIGS.dump()
+        response = "🤖 Removed successfully:\n" + "\n".join([f"{name} removed successfully!" for name in removed_chats])
+        await message.reply_text(response)
+    else:
+        await message.reply_text("🤖 No chats were removed.")
+
+
+async def on_list_command(client: Client, message: Message):
+    if not CONFIGS.forward_from_chat_ids and not CONFIGS.forward_to_chat_ids:
+        return await message.reply_text("🤖 No chats have been added yet.")
+
+    response = []
+    if CONFIGS.forward_from_chat_ids:
+        source_list = ["🤖 Source:"]
+        for chat_id in CONFIGS.forward_from_chat_ids:
+            chat_name = await get_chat_name(client, chat_id)
+            source_list.append(f"{chat_name}(`{chat_id}`)")
+        response.extend(source_list)
+
+    if CONFIGS.forward_to_chat_ids:
+        if response:
+            response.append("")
+        target_list = ["🤖 Target:"]
+        for chat_id in CONFIGS.forward_to_chat_ids:
+            chat_name = await get_chat_name(client, chat_id)
+            target_list.append(f"{chat_name}(`{chat_id}`)")
+        response.extend(target_list)
+
+    await message.reply_text("\n".join(response))
+
+
+async def on_link_command(client: Client, message: Message):
+    parts = message.text.split()
+    if len(parts) != 3:
+        return await message.reply_text("🤖 Usage: !link <source_id> <target_id>")
+    try:
+        source_id, target_id = map(int, parts[1:3])
+    except ValueError:
+        return await message.reply_text("🤖 Invalid chat IDs. Please use numeric IDs.")
+    if source_id not in CONFIGS.forward_from_chat_ids:
+        return await message.reply_text("🤖 Source ID is not in the list of source chats.")
+    if target_id not in CONFIGS.forward_to_chat_ids:
+        return await message.reply_text("🤖 Target ID is not in the list of target chats.")
+    used_numbers = set()
+    for links in CONFIGS.links.values():
+        used_numbers.update(number for _, number in links)
+    link_number = 1
+    while link_number in used_numbers:
+        link_number += 1
+    if source_id not in CONFIGS.links:
+        CONFIGS.links[source_id] = []
+    CONFIGS.links[source_id].append((target_id, link_number))
+    CONFIGS.link_counter = max(CONFIGS.link_counter, link_number)
+    print(CONFIGS.links)
+    CONFIGS.dump()
+    source_name = await get_chat_name(client, source_id)
+    target_name = await get_chat_name(client, target_id)
+    await message.reply_text(
+        f"🤖 Linked: {source_name}(`{source_id}`) -> {target_name}(`{target_id}`) - Link #{link_number}")
+
+
+async def on_unlink_command(client: Client, message: Message):
+    parts = message.text.split()
+    if len(parts) != 2:
+        return await message.reply_text("🤖 Usage: !unlink <link_number>")
+
+    try:
+        link_number = int(parts[1])
+    except ValueError:
+        return await message.reply_text("🤖 Invalid link number. Please use a numeric value.")
+    found = False
+    for source_id, links in CONFIGS.links.items():
+        for i, (target_id, number) in enumerate(links):
+            if number == link_number:
+                del CONFIGS.links[source_id][i]
+                if not CONFIGS.links[source_id]:
+                    del CONFIGS.links[source_id]
+                CONFIGS.link_counter -= 1
+                for s_id in CONFIGS.links:
+                    CONFIGS.links[s_id] = [(t_id, n if n < link_number else n - 1) for t_id, n in CONFIGS.links[s_id]]
+                CONFIGS.dump()
+                source_name = await get_chat_name(client, source_id)
+                target_name = await get_chat_name(client, target_id)
+                await message.reply_text(
+                    f"🤖 Unlinked: {source_name}(`{source_id}`) -> {target_name}(`{target_id}`) - Link #{link_number}")
+                found = True
+                break
+        if found:
+            break
+    if not found:
+        await message.reply_text("🤖 This link number does not exist.")
+
+
+async def on_list_links_command(client: Client, message: Message):
+    if not CONFIGS.links:
+        return await message.reply_text("🤖 No active links.")
+
+    links_list = ["🤖 List of links:"]
+    for source_id, links in CONFIGS.links.items():
+        source_name = await get_chat_name(client, source_id)
+        for target_id, link_number in links:
+            target_name = await get_chat_name(client, target_id)
+            links_list.append(f"#{link_number} Link:\n{source_name}(`{source_id}`) -> {target_name}(`{target_id}`)")
+
+    await message.reply_text("\n\n".join(links_list))
+
+
+async def on_add_scenario_command(client: Client, message: Message):
+    print("Entering scenario input mode")
+    CONFIGS.scenario_input_mode = True
+    CONFIGS.current_scenario = ""
+    print(f"Scenario input mode: {CONFIGS.scenario_input_mode}")
+    await message.reply_text("🤖 Enter your scenario code. Use !end_scenario <name> when finished.")
+
+
+async def on_end_scenario_command(client: Client, message: Message):
+    if not CONFIGS.scenario_input_mode:
+        return await message.reply_text("🤖 No scenario input in progress.")
+    parts = message.text.split(maxsplit=1)
+    if len(parts) != 2:
+        return await message.reply_text("🤖 Usage: !end_scenario <name>")
+    name = parts[1]
+    scenario_number = CONFIGS.scenario_counter + 1
+    CONFIGS.scenarios[scenario_number] = (name, CONFIGS.current_scenario)
+    CONFIGS.scenario_counter = scenario_number
+    CONFIGS.scenario_input_mode = False
+    CONFIGS.current_scenario = ""
+    CONFIGS.dump()
+    await message.reply_text(f"🤖 Scenario #{scenario_number} '{name}' added successfully.")
+
+
+async def on_remove_scenario_command(client: Client, message: Message):
+    parts = message.text.split()
+    if len(parts) != 2:
+        return await message.reply_text("🤖 Usage: !remove_scenario <number>")
+    try:
+        scenario_number = int(parts[1])
+    except ValueError:
+        return await message.reply_text("🤖 Invalid scenario number.")
+    if scenario_number not in CONFIGS.scenarios:
+        return await message.reply_text("🤖 Scenario not found.")
+    del CONFIGS.scenarios[scenario_number]
+    CONFIGS.dump()
+    await message.reply_text(f"🤖 Scenario #{scenario_number} removed successfully.")
+
+
+async def on_list_scenarios_command(client: Client, message: Message):
+    if not CONFIGS.scenarios:
+        return await message.reply_text("🤖 No scenarios available.")
+
+    scenarios_list = ["🤖 List of scenarios:"]
+    for number, (name, code) in CONFIGS.scenarios.items():
+        scenarios_list.append(f"#{number} Scenario {name}:\n```\n{code}\n```")
+
+    await message.reply_text("\n\n".join(scenarios_list))
+
+
+async def on_add_stage_command(client: Client, message: Message):
+    parts = message.text.split()
+    if len(parts) != 3:
+        return await message.reply_text("🤖 Usage: !add_stage <link_number> <scenario_number>")
+    try:
+        link_number = int(parts[1])
+        scenario_number = int(parts[2])
+    except ValueError:
+        return await message.reply_text("🤖 Invalid link or scenario number.")
+    if link_number not in CONFIGS.get_all_link_numbers():
+        return await message.reply_text("🤖 Link not found.")
+    if scenario_number not in CONFIGS.scenarios:
+        return await message.reply_text("🤖 Scenario not found.")
+    stage_number = CONFIGS.stage_counter + 1
+    CONFIGS.stages[stage_number] = (link_number, scenario_number)
+    CONFIGS.stage_counter = stage_number
+    CONFIGS.dump()
+    await message.reply_text(f"🤖 Stage #{stage_number} added successfully.")
+
+
+async def on_remove_stage_command(client: Client, message: Message):
+    parts = message.text.split()
+    if len(parts) != 2:
+        return await message.reply_text("🤖 Usage: !remove_stage <stage_number>")
+    try:
+        stage_number = int(parts[1])
+    except ValueError:
+        return await message.reply_text("🤖 Invalid stage number.")
+    if stage_number not in CONFIGS.stages:
+        return await message.reply_text("🤖 Stage not found.")
+    del CONFIGS.stages[stage_number]
+    CONFIGS.dump()
+    await message.reply_text(f"🤖 Stage #{stage_number} removed successfully.")
+
+
+async def on_list_stages_command(client: Client, message: Message):
+    if not CONFIGS.stages:
+        return await message.reply_text("🤖 No stages available.")
+
+    stages_list = ["🤖 List of stages:"]
+    for stage_number, (link_number, scenario_number) in CONFIGS.stages.items():
+        scenario_name = CONFIGS.scenarios.get(scenario_number, ("Unknown", ""))[0]
+        stages_list.append(f"#{stage_number} Stage:\n#{scenario_number} Scenario '{scenario_name}' -> #{link_number} Link")
+
+    await message.reply_text("\n\n".join(stages_list))
+
+    # Add this part to print debug information
+    print("Current stages configuration:")
+    print(CONFIGS.stages)
+    print("Current scenarios configuration:")
+    print(CONFIGS.scenarios)
+    print("Current links configuration:")
+    print(CONFIGS.links)
 
 
 @user.on_message(filters.all, group=0)
@@ -150,32 +332,62 @@ async def main(client: Client, message: Message):
     bot_command = (message.chat is not None and message.chat.type == ChatType.PRIVATE and message.from_user.is_self
                    and message.text is not None)
     if bot_command:
-        add_forward_command = (message.text.startswith("!add_forward_to_chat") or
-                               message.text.startswith("!add_forward_from_chat"))
-        remove_forward_command = (message.text.startswith("!remove_forward_to_chat") or
-                                  message.text.startswith("!remove_forward_from_chat"))
-        list_forward_command = (message.text.startswith("!list_forward_to_chat") or
-                                message.text.startswith("!list_forward_from_chat"))
         if message.text == "!start":
             await on_start_command(client, message)
         elif message.text == "!stop":
             await on_stop_command(message)
         elif message.text == "!help":
             await on_help_command(message)
-        elif add_forward_command:
-            await on_add_forward_command(client, message)
-        elif remove_forward_command:
-            await on_remove_forward_command(client, message)
-        elif list_forward_command:
-            await on_list_forward_command(client, message)
+        elif message.text.startswith("!add_source"):
+            await on_add_command(client, message, is_source=True)
+        elif message.text.startswith("!add_target"):
+            await on_add_command(client, message, is_source=False)
+        elif message.text.startswith("!add_target"):
+            await on_add_command(client, message, is_source=False)
+        elif message.text.startswith("!remove_source"):
+            await on_remove_command(client, message, is_source=True)
+        elif message.text.startswith("!remove_target"):
+            await on_remove_command(client, message, is_source=False)
+        elif message.text == "!list":
+            await on_list_command(client, message)
+        elif message.text.startswith("!link"):
+            await on_link_command(client, message)
+        elif message.text.startswith("!unlink"):
+            await on_unlink_command(client, message)
+        elif message.text == "!list_links":
+            await on_list_links_command(client, message)
+        elif message.text == "!add_scenario":
+            await on_add_scenario_command(client, message)
+        elif message.text.startswith("!end_scenario"):
+            await on_end_scenario_command(client, message)
+        elif message.text.startswith("!remove_scenario"):
+            await on_remove_scenario_command(client, message)
+        elif message.text == "!list_scenarios":
+            await on_list_scenarios_command(client, message)
+        elif message.text.startswith("!add_stage"):
+            await on_add_stage_command(client, message)
+        elif message.text.startswith("!remove_stage"):
+            await on_remove_stage_command(client, message)
+        elif message.text == "!list_stages":
+            await on_list_stages_command(client, message)
+        elif CONFIGS.scenario_input_mode and message.from_user.is_self:
+            CONFIGS.current_scenario += message.text + "\n"
     elif message.chat is not None and message.chat.id in CONFIGS.forward_from_chat_ids and RUN["is_running"]:
-        while True:
-            try:
-                await forward_message(client, message, CONFIGS.forward_as_copy, CONFIGS.forward_to_chat_ids)
-                break
-            except FloodWait as e:
-                await asyncio.sleep(e.value)
-
+        if message.chat.id in CONFIGS.links:
+            for target_id, link_number in CONFIGS.links[message.chat.id]:
+                    try:
+                        # Apply scenarios before forwarding
+                        modified_message = await execute_scenarios(client, message, link_number)
+                        if modified_message is not None:
+                            await forward_message(client, modified_message or message, CONFIGS.forward_as_copy,
+                                                  {target_id})
+                    except FloodWait as e:
+                        print(f"FloodWait: {e.x} seconds")
+                        await asyncio.sleep(e.x)
+                    except Exception as e:
+                        print(f"Error forwarding message: {str(e)}")
+                        await client.send_message(chat_id="me",
+                                                  text=f"#ERROR: `{str(e)}`\n\nUnable to forward message to `{target_id}`")
 
 if __name__ == "__main__":
     user.run()
