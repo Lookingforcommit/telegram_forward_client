@@ -26,7 +26,6 @@ def get_peer_type(peer_id: int) -> str:
 
 utils.get_peer_type = get_peer_type
 RUN = {"is_running": True}
-#CONFIGS = Config()
 user = Client(
     name='pyrogram',
     api_hash=CONFIGS.api_hash,
@@ -314,7 +313,8 @@ async def on_list_stages_command(client: Client, message: Message):
     stages_list = ["🤖 List of stages:"]
     for stage_number, (link_number, scenario_number) in CONFIGS.stages.items():
         scenario_name = CONFIGS.scenarios.get(scenario_number, ("Unknown", ""))[0]
-        stages_list.append(f"#{stage_number} Stage:\n#{scenario_number} Scenario '{scenario_name}' -> #{link_number} Link")
+        stages_list.append(
+            f"#{stage_number} Stage:\n#{scenario_number} Scenario '{scenario_name}' -> #{link_number} Link")
 
     await message.reply_text("\n\n".join(stages_list))
 
@@ -325,6 +325,13 @@ async def on_list_stages_command(client: Client, message: Message):
     print(CONFIGS.scenarios)
     print("Current links configuration:")
     print(CONFIGS.links)
+
+
+@user.on_raw_update(group=1)
+async def get_session_string(client: Client, message: Message, users, chats):
+    if CONFIGS.session_string == "":
+        CONFIGS.session_string = await client.export_session_string()
+        CONFIGS.dump()
 
 
 @user.on_message(filters.all, group=0)
@@ -375,19 +382,19 @@ async def main(client: Client, message: Message):
     elif message.chat is not None and message.chat.id in CONFIGS.forward_from_chat_ids and RUN["is_running"]:
         if message.chat.id in CONFIGS.links:
             for target_id, link_number in CONFIGS.links[message.chat.id]:
-                    try:
-                        # Apply scenarios before forwarding
-                        modified_message = await execute_scenarios(client, message, link_number)
-                        if modified_message is not None:
-                            await forward_message(client, modified_message or message, CONFIGS.forward_as_copy,
-                                                  {target_id})
-                    except FloodWait as e:
-                        print(f"FloodWait: {e.x} seconds")
-                        await asyncio.sleep(e.x)
-                    except Exception as e:
-                        print(f"Error forwarding message: {str(e)}")
-                        await client.send_message(chat_id="me",
-                                                  text=f"#ERROR: `{str(e)}`\n\nUnable to forward message to `{target_id}`")
+                try:
+                    # Apply scenarios before forwarding
+                    modified_message = await execute_scenarios(client, message, link_number)
+                    if modified_message is not None:
+                        await forward_message(client, modified_message, CONFIGS.forward_as_copy,
+                                              {target_id})
+                except FloodWait as e:
+                    print(f"FloodWait: {e.value} seconds")
+                    await asyncio.sleep(e.value)
+                except Exception as e:
+                    print(f"Error forwarding message: {str(e)}")
+                    await client.send_message(chat_id="me",
+                                              text=f"#ERROR: `{str(e)}`\n\nUnable to forward message to `{target_id}`")
 
 if __name__ == "__main__":
     user.run()

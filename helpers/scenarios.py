@@ -1,10 +1,6 @@
 from pyrogram import Client
-from pyrogram.types import Message, MessageEntity
-import re
+from pyrogram.types import Message
 
-
-
-import traceback
 
 async def execute_scenarios(client: Client, message: Message, link_number: int) -> Message:
     from configs import CONFIGS  # Import here to avoid circular imports
