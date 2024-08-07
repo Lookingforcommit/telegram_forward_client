@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Optional, Set, Dict, List, Tuple, Any
 
 
@@ -37,6 +38,28 @@ class Config:
         self.load()
         self.scenario_input_mode: bool = False
         self.current_scenario: str = ""
+        self.forward_as_copy: bool = True
+
+    def save_scenario(self, name: str, code: str) -> None:
+        os.makedirs('scenarios', exist_ok=True)
+        with open(f'scenarios/{name}.py', 'w', encoding='utf-8') as f:
+            f.write(code)
+
+    def load_scenario(self, name: str) -> str:
+        try:
+            with open(f'scenarios/{name}.py', 'r', encoding='utf-8') as f:
+                return f.read()
+        except FileNotFoundError:
+            return ""
+
+    def remove_scenario_file(self, name: str) -> None:
+        try:
+            os.remove(f'scenarios/{name}.py')
+        except FileNotFoundError:
+            pass
+
+    def list_scenario_files(self) -> List[str]:
+        return [f[:-3] for f in os.listdir('scenarios') if f.endswith('.py')]
 
     def dump(self) -> None:
         data_dict = {
@@ -45,13 +68,12 @@ class Config:
             "session_string": self.session_string,
             "forward_from_chat_ids": list(self.forward_from_chat_ids),
             "forward_to_chat_ids": list(self.forward_to_chat_ids),
-            "forward_as_copy": self.forward_as_copy,
             "links": self.links,
             "link_counter": self.link_counter,
-            "scenarios": self.scenarios,
             "scenario_counter": self.scenario_counter,
             "stages": self.stages,
-            "stage_counter": self.stage_counter
+            "stage_counter": self.stage_counter,
+            "forward_as_copy": self.forward_as_copy
         }
         configs_json = json.dumps(data_dict, indent=2)
         with open("configs.json", "w") as f:
@@ -65,13 +87,18 @@ class Config:
         self.session_string: Optional[str] = _data["session_string"]
         self.forward_from_chat_ids: Set[int] = set(_data["forward_from_chat_ids"])
         self.forward_to_chat_ids: Set[int] = set(_data["forward_to_chat_ids"])
-        self.forward_as_copy: bool = _data["forward_as_copy"]
         self.links: Dict[int, List[Tuple[int, int]]] = load_dict(_data, "links")
         self.link_counter: int = _data.get("link_counter", 0)
-        self.scenarios: Dict[int, Tuple[str, str]] = load_dict(_data, "scenarios")
         self.scenario_counter: int = _data.get("scenario_counter", 0)
-        self.stages: Dict[int, Tuple[int, int]] = load_dict(_data, "stages")  # {stage_number: (link_number, scenario_number)}
+        self.stages: Dict[int, Tuple[int, int]] = load_dict(_data, "stages")
         self.stage_counter: int = _data.get("stage_counter", 0)
+        self.forward_as_copy: bool = _data.get("forward_as_copy", True)
+
+        # Загрузка сценариев из файлов
+        self.scenarios = {}
+        for i, name in enumerate(self.list_scenario_files(), start=1):
+            self.scenarios[i] = (name, self.load_scenario(name))
+        self.scenario_counter = max(self.scenarios.keys(), default=0)
 
     def get_all_link_numbers(self) -> Set[int]:
         return set(number for links in self.links.values() for _, number in links)

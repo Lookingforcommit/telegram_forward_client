@@ -11,7 +11,6 @@ import pyrogram.utils as utils
 
 from configs import CONFIGS
 from helpers.forwarder import forward_message
-from helpers.scenarios import execute_scenarios
 
 
 def get_peer_type(peer_id: int) -> str:
@@ -236,7 +235,16 @@ async def on_end_scenario_command(client: Client, message: Message):
     if len(parts) != 2:
         return await message.reply_text("🤖 Usage: !end_scenario <name>")
     name = parts[1]
+
+    # Добавляем проверку кодировки
+    try:
+        CONFIGS.current_scenario.encode('utf-8')
+    except UnicodeEncodeError:
+        return await message.reply_text(
+            "🤖 Error: Scenario contains invalid characters. Please use only UTF-8 compatible characters.")
+
     scenario_number = CONFIGS.scenario_counter + 1
+    CONFIGS.save_scenario(name, CONFIGS.current_scenario)
     CONFIGS.scenarios[scenario_number] = (name, CONFIGS.current_scenario)
     CONFIGS.scenario_counter = scenario_number
     CONFIGS.scenario_input_mode = False
@@ -255,6 +263,8 @@ async def on_remove_scenario_command(client: Client, message: Message):
         return await message.reply_text("🤖 Invalid scenario number.")
     if scenario_number not in CONFIGS.scenarios:
         return await message.reply_text("🤖 Scenario not found.")
+    name, _ = CONFIGS.scenarios[scenario_number]
+    CONFIGS.remove_scenario_file(name)
     del CONFIGS.scenarios[scenario_number]
     CONFIGS.dump()
     await message.reply_text(f"🤖 Scenario #{scenario_number} removed successfully.")
@@ -327,6 +337,39 @@ async def on_list_stages_command(client: Client, message: Message):
     print(CONFIGS.links)
 
 
+async def execute_scenarios(client: Client, message: Message, link_number: int) -> Message:
+    print(f"Executing scenarios for link number: {link_number}")
+    modified_message = message
+    for stage_number, (stage_link_number, scenario_number) in CONFIGS.stages.items():
+        print(f"Checking stage {stage_number}: link {stage_link_number}, scenario {scenario_number}")
+        if stage_link_number == link_number:
+            print(f"Executing scenario {scenario_number}")
+            scenario_name, scenario_code = CONFIGS.scenarios[scenario_number]
+            try:
+                # Попытка декодировать сценарий в UTF-8
+                scenario_code = scenario_code.encode('utf-8').decode('utf-8')
+
+                # Create a new local scope for each scenario
+                local_scope = {'client': client, 'message': modified_message}
+                exec(scenario_code, globals(), local_scope)
+                # Get the potentially modified message from the local scope
+                new_message = local_scope['message']
+                if new_message != modified_message:
+                    modified_message = new_message
+                    print(f"Scenario {scenario_number} modified the message")
+                else:
+                    print(f"Scenario {scenario_number} did not modify the message")
+            except UnicodeEncodeError:
+                print(f"Error: Scenario {scenario_number} contains invalid characters")
+            except Exception as e:
+                print(f"Error executing scenario #{scenario_number} '{scenario_name}': {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+
+    print(f"All scenarios executed. Message modified: {modified_message != message}")
+    return modified_message
+
+
 @user.on_raw_update(group=1)
 async def get_session_string(client: Client, message: Message, users, chats):
     if CONFIGS.session_string == "":
@@ -347,8 +390,6 @@ async def main(client: Client, message: Message):
             await on_help_command(message)
         elif message.text.startswith("!add_source"):
             await on_add_command(client, message, is_source=True)
-        elif message.text.startswith("!add_target"):
-            await on_add_command(client, message, is_source=False)
         elif message.text.startswith("!add_target"):
             await on_add_command(client, message, is_source=False)
         elif message.text.startswith("!remove_source"):
@@ -395,6 +436,7 @@ async def main(client: Client, message: Message):
                     print(f"Error forwarding message: {str(e)}")
                     await client.send_message(chat_id="me",
                                               text=f"#ERROR: `{str(e)}`\n\nUnable to forward message to `{target_id}`")
+
 
 if __name__ == "__main__":
     user.run()
