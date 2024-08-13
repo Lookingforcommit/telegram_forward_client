@@ -39,6 +39,7 @@ class Config:
         self.scenario_input_mode: bool = False
         self.current_scenario: str = ""
         self.forward_as_copy: bool = True
+        self.is_running: bool = False
 
     def save_scenario(self, name: str, code: str) -> None:
         os.makedirs('scenarios', exist_ok=True)
@@ -94,7 +95,7 @@ class Config:
         self.stage_counter: int = _data.get("stage_counter", 0)
         self.forward_as_copy: bool = _data.get("forward_as_copy", True)
 
-        # Загрузка сценариев из файлов
+        # Loading scenarios from files
         self.scenarios = {}
         for i, name in enumerate(self.list_scenario_files(), start=1):
             self.scenarios[i] = (name, self.load_scenario(name))
@@ -104,5 +105,4 @@ class Config:
         return set(number for links in self.links.values() for _, number in links)
 
 
-# Создайте экземпляр класса Config
 CONFIGS = Config()
