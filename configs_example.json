@@ -2,8 +2,14 @@
   "api_id": 0,
   "api_hash": "",
   "session_string": "",
+  "preprocess_chat_id": "me",
   "forward_from_chat_ids": [],
   "forward_to_chat_ids": [],
-  "forward_filters": [],
-  "forward_as_copy": true
+  "forward_as_copy": true,
+  "links": {},
+  "link_counter": 0,
+  "scenarios": {},
+  "scenario_counter": 0,
+  "stages": {},
+  "stage_counter": 0
 }

@@ -9,20 +9,32 @@ This is a Telegram messages forwarder bot.
 - Simple & user-friendly
 
 ### Configs:
+
 - `api_id` - Get from my.telegram.org
 - `api_hash` - Get from my.telegram.org
 - `session_string` - Bot saves your session string after first authorization, or you can enter it by yourself
-- `forward_to_chat_ids` - Forward to chat_ids
+- `preprocess_chat_id` - ID of the chat for preprocessing messages prior to scenarios execution 
 - `forward_from_chat_ids` - Forward from chat_ids
-- `forward_as_copy` - Forward Messages as Copy or with forward tag. Boolean value
+- `forward_to_chat_ids` - Forward to chat_ids
+- `links` - Connections from source channels to destination channels
+- `link_counter` - Counter of active links
+- `stages` - Connections between links and scenarios
+- `stage_counter` - Counter of active stages
 
 ### **Commands:**
-- `!start` - Check if bot is alive or not.
-- `!help` - Get this message.
-- `!stop` - Stop the bot.
-- `!add_forward_to_chat` - Add chat_ids to forward messages to. Separate with space.
-- `!add_forward_from_chat` - Add chat_ids to forward messages from. Separate with space.
-- `!remove_forward_to_chat` - Remove chat_ids to forward messages to. Separate with space.
-- `!remove_forward_from_chat` - Remove chat_ids to forward messages from. Separate with space.
-- `!list_forward_to_chat` - List chat_ids of the chats you are forwarding messages to. Separate with space.
-- `!list_forward_from_chat` - List chat_ids of the chats you are forwarding messages from. Separate with space.
+- `!start` - Check if the userbot is alive.
+- `!help` - Get this help message.
+- `!stop` - Stop the userbot.
+- `!add_source [chat_id_1 chat_id_2 ...]` - Add chat IDs to forward messages from.
+- `!add_target [chat_id_1 chat_id_2 ...]` - Add chat IDs to forward messages to.
+- `!remove_source [chat_id_1 chat_id_2 ...]` - Remove chat IDs from the list of sources.
+- `!remove_target [chat_id_1 chat_id_2 ...]` - Remove chat IDs from the list of targets.
+- `!list` - List chat IDs of sources and targets.
+- `!link [source_chat_id] [target_chat_id]` - Connect a source channel to a destination channel.
+- `!unlink [link_number]` - Disconnect a source channel from a destination channel.
+- `!list_links` - List all source to destination channel connections.
+- `!set_preprocess_chat [chat_id]` - Set chat for preprocessing messages prior to scenarios execution.
+- `!list_scenarios` - List all scenarios.
+- `!add_stage [link_number] [scenario_name]` - Add a stage to a link.
+- `!remove_stage [stage_number]` - Remove a stage.
+- `!list_stages` - List all stages.
