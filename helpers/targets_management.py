@@ -1,3 +1,6 @@
+# (c) @Lookingforcommit
+# (c) @synthimental
+
 from typing import Set
 from pyrogram import Client
 from pyrogram.types import Message
@@ -28,11 +31,11 @@ async def add_source_target(client: Client, message: Message, configs: Config, i
         await message.reply_text("🤖 No new chats were added.")
 
 
-async def on_add_source_command(client: Client, message: Message, configs: Config):
+async def on_add_source_command(client: Client, message: Message, configs: Config, **kwargs):
     await add_source_target(client, message, configs, configs.forward_from_chat_ids)
 
 
-async def on_add_target_command(client: Client, message: Message, configs: Config):
+async def on_add_target_command(client: Client, message: Message, configs: Config, **kwargs):
     await add_source_target(client, message, configs, configs.forward_to_chat_ids)
 
 
@@ -58,11 +61,11 @@ async def remove_source_target(client: Client, message: Message, configs: Config
         await message.reply_text("🤖 No chats were removed.")
 
 
-async def on_remove_source_command(client: Client, message: Message, configs: Config):
+async def on_remove_source_command(client: Client, message: Message, configs: Config, **kwargs):
     await remove_source_target(client, message, configs, configs.forward_from_chat_ids)
 
 
-async def on_remove_target_command(client: Client, message: Message, configs: Config):
+async def on_remove_target_command(client: Client, message: Message, configs: Config, **kwargs):
     await remove_source_target(client, message, configs, configs.forward_to_chat_ids)
 
 

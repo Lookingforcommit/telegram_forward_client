@@ -2,6 +2,7 @@
   "api_id": 0,
   "api_hash": "",
   "session_string": "",
+  "preprocess_chat_id": "me",
   "forward_from_chat_ids": [],
   "forward_to_chat_ids": [],
   "forward_as_copy": true,

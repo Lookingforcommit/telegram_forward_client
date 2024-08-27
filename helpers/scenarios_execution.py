@@ -1,90 +1,70 @@
+# (c) @Lookingforcommit
+# (c) @synthimental
+
 from pyrogram import Client
 from pyrogram.types import Message
+import json
 
 from configs import Config
+from scenarios.scenarios_configs import ScenariosConfig
+from scenarios.scenarios_mapping import OBJECTS_MAPPING
+from helpers.forwarder import forward_message
+from exceptions import ScenarioException, PreprocessCopyingException
 
 
-async def on_add_scenario_command(client: Client, message: Message, configs: Config) -> None:
-    print("Entering scenario input mode")
-    configs.scenario_input_mode = True
-    configs.current_scenario = ""
-    print(f"Scenario input mode: {configs.scenario_input_mode}")
-    await message.reply_text("🤖 Enter your scenario code. Use !end_scenario <name> when finished.")
-
-
-async def on_end_scenario_command(client: Client, message: Message, configs: Config) -> Message:
-    if not configs.scenario_input_mode:
-        return await message.reply_text("🤖 No scenario input in progress.")
-    parts = message.text.split(maxsplit=1)
-    if len(parts) != 2:
-        return await message.reply_text("🤖 Usage: !end_scenario <name>")
-    name = parts[1]
-    # Encoding check
-    try:
-        configs.current_scenario.encode('utf-8')
-    except UnicodeEncodeError:
-        return await message.reply_text(
-            "🤖 Error: Scenario contains invalid characters. Please use only UTF-8 compatible characters.")
-    scenario_number = configs.scenario_counter + 1
-    configs.save_scenario(name, configs.current_scenario)
-    configs.scenarios[scenario_number] = (name, configs.current_scenario)
-    configs.scenario_counter = scenario_number
-    configs.scenario_input_mode = False
-    configs.current_scenario = ""
-    configs.dump()
-    await message.reply_text(f"🤖 Scenario #{scenario_number} '{name}' added successfully.")
-
-
-async def on_remove_scenario_command(client: Client, message: Message, configs: Config) -> Message:
-    parts = message.text.split()
-    if len(parts) != 2:
-        return await message.reply_text("🤖 Usage: !remove_scenario <number>")
-    try:
-        scenario_number = int(parts[1])
-    except ValueError:
-        return await message.reply_text("🤖 Invalid scenario number.")
-    if scenario_number not in configs.scenarios:
-        return await message.reply_text("🤖 Scenario not found.")
-    name, _ = configs.scenarios[scenario_number]
-    configs.remove_scenario_file(name)
-    del configs.scenarios[scenario_number]
-    configs.dump()
-    await message.reply_text(f"🤖 Scenario #{scenario_number} removed successfully.")
-
-
-async def on_list_scenarios_command(client: Client, message: Message, configs: Config) -> Message:
-    if not configs.scenarios:
+async def on_list_scenarios_command(message: Message, **kwargs) -> Message:
+    if len(OBJECTS_MAPPING) == 0:
         return await message.reply_text("🤖 No scenarios available.")
     scenarios_list = ["🤖 List of scenarios:"]
-    for number, (name, code) in configs.scenarios.items():
-        scenarios_list.append(f"#{number} Scenario {name}:\n```\n{code}\n```")
+    for name in OBJECTS_MAPPING:
+        scenario_object = OBJECTS_MAPPING[name]
+        scenarios_list.append(f"Scenario `{name}`:\n{scenario_object.DESCRIPTION}")
     await message.reply_text("\n\n".join(scenarios_list))
 
 
-async def on_add_stage_command(client: Client, message: Message, configs: Config) -> Message:
-    parts = message.text.split()
-    if len(parts) != 3:
-        return await message.reply_text("🤖 Usage: !add_stage <link_number> <scenario_number>")
+async def on_list_stages_command(message: Message, configs: Config, **kwargs) -> Message:
+    if not configs.stages:
+        return await message.reply_text("🤖 No stages available.")
+    stages_list = ["🤖 List of stages:"]
+    for stage_number, (link_number, scenario_name) in configs.stages.items():
+        stages_list.append(
+            f"#{stage_number} Stage:\nScenario `{scenario_name}` -> #{link_number} Link")
+    await message.reply_text("\n\n".join(stages_list))
+
+
+async def on_add_stage_command(message: Message, configs: Config, scenarios_configs: ScenariosConfig,
+                               **kwargs) -> Message:
+    parts = message.text.split(maxsplit=3)
+    if len(parts) != 4:
+        return await message.reply_text("🤖 Usage: !add_stage [link_number] [scenario_name] [arguments_dictionary]")
     try:
         link_number = int(parts[1])
-        scenario_number = int(parts[2])
+        scenario_name = parts[2]
     except ValueError:
-        return await message.reply_text("🤖 Invalid link or scenario number.")
+        return await message.reply_text("🤖 Invalid link or scenario name.")
     if link_number not in configs.get_all_link_numbers():
         return await message.reply_text("🤖 Link not found.")
-    if scenario_number not in configs.scenarios:
+    if scenario_name not in OBJECTS_MAPPING:
         return await message.reply_text("🤖 Scenario not found.")
     stage_number = configs.stage_counter + 1
-    configs.stages[stage_number] = (link_number, scenario_number)
+    configs.stages[stage_number] = (link_number, scenario_name)
     configs.stage_counter = stage_number
     configs.dump()
-    await message.reply_text(f"🤖 Stage #{stage_number} added successfully.")
+    scenario_object = OBJECTS_MAPPING[scenario_name]
+    try:
+        processed_arguments = scenario_object.process_arguments(json.loads(parts[3]))
+        scenarios_configs.stages_arguments[stage_number] = processed_arguments
+        scenarios_configs.dump()
+        await message.reply_text(f"🤖 Stage #{stage_number} added successfully.")
+    except Exception as e:
+        await message.reply_text(f"🤖 Incorrect arguments for stage #{stage_number}."
+                                 f" \nError: {e}")
 
 
-async def on_remove_stage_command(client: Client, message: Message, configs: Config) -> Message:
+async def on_remove_stage_command(message: Message, configs: Config, **kwargs) -> Message:
     parts = message.text.split()
     if len(parts) != 2:
-        return await message.reply_text("🤖 Usage: !remove_stage <stage_number>")
+        return await message.reply_text("🤖 Usage: !remove_stage [stage_number]")
     try:
         stage_number = int(parts[1])
     except ValueError:
@@ -96,49 +76,86 @@ async def on_remove_stage_command(client: Client, message: Message, configs: Con
     await message.reply_text(f"🤖 Stage #{stage_number} removed successfully.")
 
 
-async def on_list_stages_command(client: Client, message: Message, configs: Config) -> Message:
-    if not configs.stages:
-        return await message.reply_text("🤖 No stages available.")
-    stages_list = ["🤖 List of stages:"]
-    for stage_number, (link_number, scenario_number) in configs.stages.items():
-        scenario_name = configs.scenarios.get(scenario_number, ("Unknown", ""))[0]
-        stages_list.append(
-            f"#{stage_number} Stage:\n#{scenario_number} Scenario '{scenario_name}' -> #{link_number} Link")
-    await message.reply_text("\n\n".join(stages_list))
-    # Add this part to print debug information
-    print("Current stages configuration:")
-    print(configs.stages)
-    print("Current scenarios configuration:")
-    print(configs.scenarios)
-    print("Current links configuration:")
-    print(configs.links)
+async def on_get_scenario_info_command(message: Message, **kwargs) -> Message:
+    parts = message.text.split()
+    if len(parts) != 2:
+        return await message.reply_text("🤖 Usage: !get_scenario_info [scenario_name]")
+    scenario_name = parts[1]
+    if scenario_name not in OBJECTS_MAPPING:
+        return await message.reply_text("🤖 Invalid scenario name.")
+    scenario_object = OBJECTS_MAPPING[scenario_name]
+    description = scenario_object.DESCRIPTION
+    arguments_info = scenario_object.ARGUMENTS_INFO
+    arguments_info = "\n".join([f"`{key}`: {arguments_info[key]}" for key in arguments_info])
+    await message.reply_text(f"🤖 Scenario `{scenario_name}`:\n{description}\n"
+                             f"Arguments: \n{arguments_info}")
 
 
-async def execute_scenarios(client: Client, message: Message, link_number: int, configs: Config) -> Message:
-    print(f"Executing scenarios for link number: {link_number}")
-    modified_message = message
-    for stage_number, (stage_link_number, scenario_number) in configs.stages.items():
-        print(f"Checking stage {stage_number}: link {stage_link_number}, scenario {scenario_number}")
-        if stage_link_number == link_number:
-            print(f"Executing scenario {scenario_number}")
-            scenario_name, scenario_code = configs.scenarios[scenario_number]
-            try:
-                scenario_code = scenario_code.encode('utf-8').decode('utf-8')
-                # Create a new local scope for each scenario
-                local_scope = {'client': client, 'message': modified_message}
-                exec(scenario_code, globals(), local_scope)
-                # Get the potentially modified message from the local scope
-                new_message = local_scope['message']
-                if new_message != modified_message:
-                    modified_message = new_message
-                    print(f"Scenario {scenario_number} modified the message")
-                else:
-                    print(f"Scenario {scenario_number} did not modify the message")
-            except UnicodeEncodeError:
-                print(f"Error: Scenario {scenario_number} contains invalid characters")
-            except Exception as e:
-                print(f"Error executing scenario #{scenario_number} '{scenario_name}': {str(e)}")
-                import traceback
-                print(traceback.format_exc())
-    print(f"All scenarios executed. Message modified: {modified_message != message}")
-    return modified_message
+async def on_get_stage_arguments_command(message: Message, configs: Config, scenarios_configs: ScenariosConfig,
+                                         **kwargs) -> Message:
+    parts = message.text.split()
+    if len(parts) != 2:
+        return await message.reply_text("🤖 Usage: !get_stage_arguments [stage_number]")
+    try:
+        stage_number = int(parts[1])
+    except ValueError:
+        return await message.reply_text("🤖 Invalid stage number.")
+    if stage_number not in configs.stages:
+        return await message.reply_text("🤖 Stage not found.")
+    stage_arguments = scenarios_configs.stages_arguments[stage_number]
+    await message.reply_text(f"🤖 Stage `{stage_number}` arguments:\n{stage_arguments}")
+
+
+async def on_set_stage_arguments_command(message: Message, configs: Config,
+                                         scenarios_configs: ScenariosConfig, **kwargs) -> Message:
+    parts = message.text.split(maxsplit=2)
+    if len(parts) != 3:
+        return await message.reply_text("🤖 Usage: !set_stage_arguments [stage_number] [arguments_dictionary]")
+    try:
+        stage_number = int(parts[1])
+    except ValueError:
+        return await message.reply_text("🤖 Invalid stage number.")
+    if stage_number not in configs.stages:
+        return await message.reply_text("🤖 Stage not found.")
+    scenario_name = configs.stages[stage_number][1]
+    scenario_object = OBJECTS_MAPPING[scenario_name]
+    try:
+        processed_arguments = scenario_object.process_arguments(json.loads(parts[2]))
+        scenarios_configs.stages_arguments[stage_number] = processed_arguments
+        scenarios_configs.dump()
+        await message.reply_text(f"🤖 Arguments for stage #{stage_number} set successfully")
+    except Exception as e:
+        await message.reply_text(f"🤖 Incorrect arguments for stage #{stage_number}."
+                                 f" \nError: {e}")
+
+
+async def on_set_preprocess_chat_command(message: Message, configs: Config, **kwargs) -> Message:
+    parts = message.text.split()
+    if len(parts) != 2:
+        return await message.reply_text("🤖 Usage: !set_preprocess_chat [chat_id]")
+    try:
+        chat_id = int(parts[1])
+    except ValueError:
+        return await message.reply_text("🤖 Invalid chat id.")
+    configs.preprocess_chat_id = chat_id
+    configs.dump()
+    await message.reply_text(f"🤖 Chat `{chat_id}` has been set for scenarios preprocessing.")
+
+
+async def execute_scenarios(client: Client, message: Message, link_number: int, configs: Config,
+                            scenarios_configs: ScenariosConfig) -> Message:
+    links_and_scenarios = list(filter(lambda item: item[1][0] == link_number, configs.stages.items()))
+    if len(links_and_scenarios) == 0:
+        return message
+    try:
+        copied_message = await forward_message(client, message, {configs.preprocess_chat_id})
+    except Exception as e:
+        raise PreprocessCopyingException(message.id, str(e))
+    for stage_number, (stage_link_number, scenario_name) in links_and_scenarios:
+        scenario_object = OBJECTS_MAPPING[scenario_name]
+        scenario_arguments = scenarios_configs.stages_arguments[stage_number]
+        try:
+            edited_message = await scenario_object.apply(client, copied_message, **scenario_arguments)
+        except Exception as e:
+            raise ScenarioException(stage_number, scenario_name, str(e))
+    return edited_message

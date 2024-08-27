@@ -1,3 +1,6 @@
+# (c) @Lookingforcommit
+# (c) @synthimental
+
 from pyrogram import Client
 from pyrogram.types import Message
 
@@ -5,10 +8,10 @@ from configs import Config
 from helpers.utilities import get_chat_name
 
 
-async def on_link_command(client: Client, message: Message, configs: Config):
+async def on_link_command(client: Client, message: Message, configs: Config, **kwargs):
     parts = message.text.split()
     if len(parts) != 3:
-        return await message.reply_text("🤖 Usage: !link <source_id> <target_id>")
+        return await message.reply_text("🤖 Usage: !link [source_id] [target_id]")
     try:
         source_id, target_id = map(int, parts[1:3])
     except ValueError:
@@ -27,7 +30,6 @@ async def on_link_command(client: Client, message: Message, configs: Config):
         configs.links[source_id] = []
     configs.links[source_id].append((target_id, link_number))
     configs.link_counter = max(configs.link_counter, link_number)
-    print(configs.links)
     configs.dump()
     source_name = await get_chat_name(client, source_id)
     target_name = await get_chat_name(client, target_id)
@@ -35,10 +37,10 @@ async def on_link_command(client: Client, message: Message, configs: Config):
         f"🤖 Linked: {source_name}(`{source_id}`) -> {target_name}(`{target_id}`) - Link #{link_number}")
 
 
-async def on_unlink_command(client: Client, message: Message, configs: Config):
+async def on_unlink_command(client: Client, message: Message, configs: Config, **kwargs):
     parts = message.text.split()
     if len(parts) != 2:
-        return await message.reply_text("🤖 Usage: !unlink <link_number>")
+        return await message.reply_text("🤖 Usage: !unlink [link_number]")
     try:
         link_number = int(parts[1])
     except ValueError:
@@ -66,7 +68,7 @@ async def on_unlink_command(client: Client, message: Message, configs: Config):
         await message.reply_text("🤖 This link number does not exist.")
 
 
-async def on_list_links_command(client: Client, message: Message, configs: Config):
+async def on_list_links_command(client: Client, message: Message, configs: Config, **kwargs):
     if not configs.links:
         return await message.reply_text("🤖 No active links.")
     links_list = ["🤖 List of links:"]
