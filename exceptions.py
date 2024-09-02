@@ -1,4 +1,5 @@
 # (c) @Lookingforcommit
+# TODO: Add exceptions classes for bot commands processing
 
 from abc import abstractmethod
 

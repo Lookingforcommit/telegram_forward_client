@@ -9,7 +9,7 @@ from pyrogram.types import Message
 
 class BaseScenario(ABC):
     DESCRIPTION = "Base class for scenarios"
-    ARGUMENTS_TYPES: Dict[str, Any] = {}
+    ARGUMENTS_CONVERSION_FUNCTIONS: Dict[str, Any] = {}
     ARGUMENTS_INFO: Dict[str, str] = {}
 
     @abstractmethod
@@ -18,5 +18,5 @@ class BaseScenario(ABC):
 
     def process_arguments(self, dct: Dict[str, Any]) -> Dict[str, Any]:
         for key in dct:
-            dct[key] = self.ARGUMENTS_TYPES[key](dct[key])
+            dct[key] = self.ARGUMENTS_CONVERSION_FUNCTIONS[key](dct[key])
         return dct

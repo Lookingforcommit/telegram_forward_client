@@ -10,7 +10,7 @@ from scenarios.scenarios_classes.base import BaseScenario
 class SampleScenario(BaseScenario):
     DESCRIPTION = ("Sample scenario for testing purposes. "
                    "It changes message text to [new_text]")
-    ARGUMENTS_TYPES = {
+    ARGUMENTS_CONVERSION_FUNCTIONS = {
         "new_text": str
     }
     ARGUMENTS_INFO = {

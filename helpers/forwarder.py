@@ -15,6 +15,5 @@ async def forward_message(client: Client, msg: Message, forward_to_chat_ids: Set
         except FloodWait as e:
             raise FloodWait(e.value)
         except Exception as e:
-            await client.send_message(chat_id="me", text=f"#ERROR: `{str(e)}`\n\nUnable to forward message to "
-                                                         f"`{chat_id}`")
+            await client.send_message(chat_id="me", text=f"#ERROR: `{e}`\n\nUnable to forward message to `{chat_id}`")
             raise e

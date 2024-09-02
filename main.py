@@ -25,7 +25,11 @@ user = Client(
 
 
 async def process_bot_command(client: Client, message: Message):
-    command = message.text.split(" ", maxsplit=1)[0]
+    if message.text is not None:
+        text = message.text
+    else:
+        text = message.caption
+    command = text.split(" ", maxsplit=1)[0]
     if command in HANDLERS_DICT.keys():
         await HANDLERS_DICT[command](client=client, message=message, configs=CONFIGS,
                                      scenarios_configs=SCENARIOS_CONFIGS)
@@ -44,7 +48,14 @@ async def process_forwarding_message(client: Client, message: Message):
                 pass
             except Exception as e:
                 await client.send_message(chat_id="me",
-                                          text=f"#ERROR: `{str(e)}`\n\nUnable to forward message to `{target_id}`")
+                                          text=f"#ERROR: `{e}`\n\nUnable to forward message to `{target_id}`")
+
+
+def is_bot_command(message: Message) -> bool:
+    chat_condition = message.chat is not None and message.chat.type == ChatType.PRIVATE
+    user_condition = message.from_user is not None and message.from_user.is_self
+    text_condition = message.text is not None or message.caption is not None
+    return chat_condition and user_condition and text_condition
 
 
 @user.on_raw_update(group=1)
@@ -56,9 +67,7 @@ async def get_session_string(client: Client, *args):
 
 @user.on_message(filters.all, group=0)
 async def main(client: Client, message: Message):
-    bot_command = (message.chat is not None and message.chat.type == ChatType.PRIVATE and message.from_user.is_self
-                   and message.text is not None)
-    if bot_command:
+    if is_bot_command(message):
         await process_bot_command(client, message)
     elif message.chat is not None and message.chat.id in CONFIGS.forward_from_chat_ids and CONFIGS.is_running:
         await process_forwarding_message(client, message)
