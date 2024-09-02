@@ -69,7 +69,7 @@ async def on_remove_target_command(client: Client, message: Message, configs: Co
     await remove_source_target(client, message, configs, configs.forward_to_chat_ids)
 
 
-async def on_list_command(client: Client, message: Message, configs: Config):
+async def on_list_command(client: Client, message: Message, configs: Config, **kwargs):
     if not configs.forward_from_chat_ids and not configs.forward_to_chat_ids:
         return await message.reply_text("🤖 No chats have been added yet.")
     response = []
